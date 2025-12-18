@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Rogue V10 - Inventory & Equipment</title>
+    <title>Pixel Rogue V11 - Responsive UI & HUD</title>
     <style>
-        /* --- 1. 基礎設定 (V7 混合佈局 - 不變) --- */
+        /* --- 1. 全局設定 --- */
         body { 
             margin: 0; padding: 0; 
             background-color: #111; 
@@ -14,32 +14,41 @@
             height: 100vh; width: 100vw;
             font-family: monospace;
             user-select: none;
+            /* 避免 iOS 點擊高亮 */
+            -webkit-tap-highlight-color: transparent;
         }
 
         #app-container {
             width: 100%; height: 100%;
             display: grid;
+            /* 橫向預設 */
             grid-template-columns: 25% 1fr 25%;
             grid-template-rows: 100%;
             grid-template-areas: "left screen right";
         }
 
+        /* --- 2. 手把容器 (Joycon Containers) --- */
         .joycon-container {
             background-color: #333;
-            position: relative; display: flex; z-index: 2;
-            box-shadow: inset 0 0 50px rgba(0,0,0,0.5);
+            position: relative;
+            display: flex;
+            z-index: 2;
+            box-shadow: inset 0 0 5vmin rgba(0,0,0,0.5);
+            /* 讓內容物居中 */
+            justify-content: center;
+            align-items: center;
         }
 
         #joycon-left { 
             grid-area: left; 
-            border-right: 4px solid #222; border-radius: 20px 0 0 20px;
-            align-items: flex-start; justify-content: center; padding-top: 15vh; 
+            border-right: 0.5vmin solid #222; 
+            border-radius: 20px 0 0 20px;
         }
 
         #joycon-right { 
             grid-area: right; 
-            border-left: 4px solid #222; border-radius: 0 20px 20px 0;
-            align-items: flex-start; justify-content: center; padding-top: 15vh;
+            border-left: 0.5vmin solid #222; 
+            border-radius: 0 20px 20px 0;
         }
 
         #game-wrapper {
@@ -51,52 +60,118 @@
             position: relative; 
         }
 
-        @media (orientation: portrait) {
-            #app-container {
-                grid-template-columns: 50% 50%;
-                grid-template-rows: 60% 40%; 
-                grid-template-areas: "screen screen" "left right";
-            }
-            .joycon-container {
-                border: none; border-radius: 0; background-color: #444; box-shadow: none;
-                border-top: 4px solid #222;
-                align-items: center; justify-content: center; padding-top: 0;
-            }
-            #joycon-left { justify-content: flex-end; padding-right: 20px; }
-            #joycon-right { justify-content: flex-start; padding-left: 20px; }
+        /* --- 3. 響應式按鈕佈局 (核心修改) --- */
+        
+        /* 使用 vmin 單位：
+           1vmin = 螢幕寬或高中較小那邊的 1%。
+           這保證了按鈕在直立或橫放時都不會超出邊界。
+        */
+
+        /* 十字鍵容器 */
+        .d-pad {
+            position: relative;
+            width: 35vmin;  /* 佔短邊的 35% */
+            height: 35vmin;
+            max-width: 250px; /* 電腦版上限限制 */
+            max-height: 250px;
         }
 
-        /* --- 按鈕樣式 --- */
-        .d-pad { position: relative; width: 180px; height: 180px; transform: scale(0.9); }
-        .d-btn { position: absolute; background: #222; border-radius: 8px; box-shadow: 0 6px 0 #111; border: 2px solid #444; }
-        .d-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #111; background: #1a1a1a; }
-        .up { width: 60px; height: 60px; top: 0; left: 60px; }
-        .down { width: 60px; height: 60px; bottom: 0; left: 60px; }
-        .left { width: 60px; height: 60px; top: 60px; left: 0; }
-        .right { width: 60px; height: 60px; top: 60px; right: 0; }
-        .center-decor { position: absolute; width: 60px; height: 60px; top: 60px; left: 60px; background: #222; border-radius: 4px; }
+        /* 動作鍵容器 */
+        .action-pad {
+            position: relative;
+            width: 35vmin;
+            height: 35vmin;
+            max-width: 250px;
+            max-height: 250px;
+        }
 
-        .action-pad { position: relative; width: 200px; height: 200px; transform: scale(0.9); }
+        /* 通用按鈕樣式 (使用 % 讓它隨容器縮放) */
+        .d-btn {
+            position: absolute;
+            background: #222;
+            border-radius: 15%; /* 稍微圓角 */
+            box-shadow: 0 0.8vmin 0 #111;
+            border: 0.3vmin solid #444;
+            width: 33%; height: 33%; /* 九宮格大小 */
+            cursor: pointer;
+        }
+        .d-btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 #111; background: #1a1a1a; }
+
+        /* 十字鍵位置 (九宮格佈局) */
+        .up    { top: 0; left: 33.3%; }
+        .down  { bottom: 0; left: 33.3%; }
+        .left  { top: 33.3%; left: 0; }
+        .right { top: 33.3%; right: 0; }
+        .center-decor { 
+            position: absolute; width: 33%; height: 33%; 
+            top: 33.3%; left: 33.3%; 
+            background: #222; border-radius: 10%;
+        }
+
+        /* A/B 按鈕 (圓形) */
         .btn {
-            width: 80px; height: 80px; border-radius: 50%; position: absolute;
-            color: rgba(255,255,255,0.9); font-size: 32px; font-weight: bold;
+            position: absolute;
+            width: 40%; height: 40%; /* 佔容器的 40% */
+            border-radius: 50%;
+            color: rgba(255,255,255,0.9);
+            font-weight: bold;
+            /* 字體大小也隨螢幕縮放 */
+            font-size: 5vmin; 
             display: flex; justify-content: center; align-items: center;
-            box-shadow: 0 6px 0 rgba(0,0,0,0.6); border: 3px solid rgba(255,255,255,0.1);
+            box-shadow: 0 0.8vmin 0 rgba(0,0,0,0.6);
+            border: 0.4vmin solid rgba(255,255,255,0.1);
+            cursor: pointer;
         }
-        .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,0.6); opacity: 0.9; }
-        .btn-a { background: #e74c3c; right: 10px; top: 50px; } 
-        .btn-b { background: #3498db; right: 100px; top: 130px; }
+        .btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 rgba(0,0,0,0.6); opacity: 0.9; }
 
+        .btn-a { background: #e74c3c; right: 0; top: 20%; } 
+        .btn-b { background: #3498db; right: 40%; bottom: 0; } 
+
+        /* Option 按鈕 */
         .opt-container {
-            position: absolute; top: 20px; left: 20px;
+            position: absolute; top: 5%; left: 10%;
             display: flex; flex-direction: column; align-items: center;
         }
         .btn-opt {
-            width: 50px; height: 20px; background: #222; border-radius: 10px;
-            border: 2px solid #555; cursor: pointer; display: flex; justify-content: center; align-items: center;
+            width: 8vmin; height: 3vmin; 
+            background: #222; border-radius: 2vmin;
+            border: 0.3vmin solid #555; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
         }
         .btn-opt:active { background: #000; }
-        .opt-label { color: #888; font-size: 10px; margin-top: 5px; font-weight: bold; letter-spacing: 1px; }
+        .opt-label { 
+            color: #888; font-size: 2vmin; margin-top: 0.5vmin; 
+            font-weight: bold; letter-spacing: 1px; 
+        }
+
+        /* --- 4. 直立模式適配 (Portrait) --- */
+        @media (orientation: portrait) {
+            #app-container {
+                grid-template-columns: 50% 50%;
+                grid-template-rows: 60% 40%; /* 螢幕佔 60%, 控制器佔 40% */
+                grid-template-areas: 
+                    "screen screen" 
+                    "left right";
+            }
+            .joycon-container {
+                border: none; border-radius: 0; background-color: #444; box-shadow: none;
+                border-top: 0.5vmin solid #222;
+            }
+            #joycon-left { justify-content: flex-end; padding-right: 5vw; }
+            #joycon-right { justify-content: flex-start; padding-left: 5vw; }
+            
+            /* 在直立模式下，按鈕稍微大一點點以方便單手操作 */
+            .d-pad, .action-pad {
+                width: 40vmin; height: 40vmin;
+            }
+        }
+        
+        /* --- 5. 橫向模式微調 (人體工學) --- */
+        @media (orientation: landscape) {
+            /* 讓按鈕稍微靠上，符合大拇指位置 */
+            #joycon-left { align-items: flex-start; padding-top: 15vh; }
+            #joycon-right { align-items: flex-start; padding-top: 15vh; }
+        }
 
     </style>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
@@ -129,19 +204,13 @@
     </div>
 
 <script>
-// --- V10 參數設定 ---
 const TILE_SIZE = 32; 
 const GRID_W = 20;
 const GRID_H = 15;
 const MOVE_DURATION = 120;
 const TURN_DELAY = 50; 
 
-// 遊戲狀態列舉
-const STATE = {
-    PLAYING: 0,
-    INVENTORY: 1,
-    GAMEOVER: 2
-};
+const STATE = { PLAYING: 0, INVENTORY: 1, GAMEOVER: 2 };
 
 const LEVEL_DATA = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -169,33 +238,26 @@ class MainScene extends Phaser.Scene {
         this.inputLocked = false; 
         this.enemies = [];        
         
-        // --- 道具資料庫 ---
         this.inventory = [
             { name: "Power Sword", type: "weapon", val: 2, equipped: false },
             { name: "Heavy Plate", type: "armor", val: 20, equipped: false }
         ];
-        this.menuIndex = 0; // 當前選到的道具索引
+        this.menuIndex = 0; 
 
         this.createLevel();
         this.createPlayer(2, 2);
-        this.spawnEnemy(5); // 生成5個敵人
+        this.spawnEnemy(5); 
         
-        // UI: HP 顯示
-        this.hpText = this.add.text(10, 10, '', { 
-            fontSize: '20px', fill: '#00ff00', fontStyle: 'bold', fontFamily: 'monospace',
-            backgroundColor: '#000000aa'
-        }).setScrollFactor(0).setDepth(100);
-        this.updateStats(); // 初始化數值顯示
+        // --- 建立圖形化 HUD (血條) ---
+        this.createHUD();
 
-        // UI: 選單介面 (一開始隱藏)
+        this.updateStats(); 
         this.createInventoryUI();
 
-        // UI: 遊戲結束介面 (一開始隱藏)
         this.gameOverText = this.add.text(0, 0, 'GAME OVER', {
             fontSize: '40px', color: '#ff0000', backgroundColor: '#000000dd', padding: {x:20, y:10}
         }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
 
-        // 攝影機
         this.cameras.main.setZoom(1.5);
         this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
         this.cameras.main.setBackgroundColor('#000000');
@@ -223,10 +285,7 @@ class MainScene extends Phaser.Scene {
             gridX: gx, gridY: gy, 
             facing: 'down', 
             sprite: container,
-            baseHp: 10, // 基礎血量
-            hp: 10, 
-            maxHp: 10,
-            atk: 1      // 基礎攻擊力
+            baseHp: 10, hp: 10, maxHp: 10, atk: 1 
         };
     }
 
@@ -251,19 +310,48 @@ class MainScene extends Phaser.Scene {
         this.enemies.push({ id: this.enemies.length, gridX: gx, gridY: gy, sprite: container, hp: 3 });
     }
 
-    // --- 道具 UI 建立 ---
+    // --- HUD 系統 ---
+    createHUD() {
+        // 固定在左上角的 UI 容器
+        this.hudContainer = this.add.container(10, 10).setScrollFactor(0).setDepth(100);
+
+        // 1. 血條背景 (深灰色)
+        this.hpBarBg = this.add.rectangle(0, 0, 200, 20, 0x330000).setOrigin(0, 0).setStrokeStyle(1, 0xffffff);
+        
+        // 2. 當前血條 (綠色)
+        this.hpBarFg = this.add.rectangle(0, 0, 200, 20, 0x00ff00).setOrigin(0, 0);
+
+        // 3. 文字數值
+        this.hpText = this.add.text(10, 2, 'HP 10/10', { 
+            fontSize: '14px', fill: '#ffffff', fontStyle: 'bold', fontFamily: 'monospace',
+            stroke: '#000000', strokeThickness: 3
+        }).setOrigin(0, 0);
+
+        this.hudContainer.add([this.hpBarBg, this.hpBarFg, this.hpText]);
+    }
+
+    // 更新血條邏輯
+    updateHPUI() {
+        const hpPercent = Phaser.Math.Clamp(this.player.hp / this.player.maxHp, 0, 1);
+        
+        // 1. 調整綠條寬度
+        this.hpBarFg.width = 200 * hpPercent;
+        
+        // 2. 顏色變化 (低血量變紅)
+        if (hpPercent < 0.3) this.hpBarFg.fillColor = 0xff0000;
+        else this.hpBarFg.fillColor = 0x00ff00;
+
+        // 3. 更新文字
+        this.hpText.setText(`HP ${this.player.hp}/${this.player.maxHp}`);
+    }
+
+
     createInventoryUI() {
         this.menuContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(150).setVisible(false);
-        
-        // 背景黑框
         const bg = this.add.rectangle(320, 240, 400, 300, 0x000000, 0.9).setStrokeStyle(2, 0xffffff);
         this.menuContainer.add(bg);
-
-        // 標題
         const title = this.add.text(320, 120, "- INVENTORY -", { fontSize: '24px', color: '#fff' }).setOrigin(0.5);
         this.menuContainer.add(title);
-
-        // 列表文字物件 (預先建立)
         this.menuItems = [];
         for(let i=0; i<5; i++) {
             let txt = this.add.text(180, 160 + i*40, "", { fontSize: '20px', color: '#fff' });
@@ -272,7 +360,6 @@ class MainScene extends Phaser.Scene {
         }
     }
 
-    // --- 核心輸入處理 (根據狀態分流) ---
     setupKeyboard() {
         this.input.keyboard.on('keydown-W', () => this.handleExternalInput('up'));
         this.input.keyboard.on('keydown-S', () => this.handleExternalInput('down'));
@@ -283,22 +370,16 @@ class MainScene extends Phaser.Scene {
     }
 
     handleExternalInput(code) {
-        // 1. 遊戲結束狀態：任意鍵重啟
         if (this.currentState === STATE.GAMEOVER) {
             this.scene.restart();
             return;
         }
-
-        // 2. 選單狀態
         if (this.currentState === STATE.INVENTORY) {
             this.handleMenuInput(code);
             return;
         }
-
-        // 3. 遊玩狀態
         if (this.inputLocked) return;
 
-        // OPTION 鍵開啟選單
         if (code === 'OPTION') {
             this.toggleInventory();
             return;
@@ -322,7 +403,6 @@ class MainScene extends Phaser.Scene {
         }
     }
 
-    // --- 選單邏輯 ---
     toggleInventory() {
         if (this.currentState === STATE.PLAYING) {
             this.currentState = STATE.INVENTORY;
@@ -344,25 +424,21 @@ class MainScene extends Phaser.Scene {
             if (this.menuIndex >= this.inventory.length) this.menuIndex = 0;
             this.updateMenuDisplay();
         } else if (code === 'A') {
-            // 裝備/卸下
             const item = this.inventory[this.menuIndex];
             item.equipped = !item.equipped;
-            this.updateStats(); // 重新計算數值
+            this.updateStats(); 
             this.updateMenuDisplay();
         } else if (code === 'B' || code === 'OPTION') {
-            this.toggleInventory(); // 關閉
+            this.toggleInventory(); 
         }
     }
 
     updateMenuDisplay() {
-        // 清空顯示
         this.menuItems.forEach(t => t.setText(""));
-        
         this.inventory.forEach((item, index) => {
             const cursor = (index === this.menuIndex) ? "> " : "  ";
             const status = item.equipped ? "[E]" : "[ ]";
             const color = item.equipped ? "#00ff00" : "#ffffff";
-            
             if (this.menuItems[index]) {
                 this.menuItems[index].setText(`${cursor}${status} ${item.name}`);
                 this.menuItems[index].setColor(color);
@@ -370,12 +446,9 @@ class MainScene extends Phaser.Scene {
         });
     }
 
-    // --- 數值計算 ---
     updateStats() {
-        // 重置為基礎值
         let totalHpBonus = 0;
         let totalAtkBonus = 0;
-
         this.inventory.forEach(item => {
             if (item.equipped) {
                 if (item.type === 'weapon') totalAtkBonus += item.val;
@@ -383,32 +456,20 @@ class MainScene extends Phaser.Scene {
             }
         });
 
-        // 攻擊力更新
         this.player.atk = 1 + totalAtkBonus;
-
-        // 血量邏輯：如果裝備盔甲，MaxHP變大，補血
         const oldMax = this.player.maxHp;
         this.player.maxHp = this.player.baseHp + totalHpBonus;
         
-        // 如果 MaxHP 增加了 (裝備盔甲)，把增加的量補到當前 HP
         if (this.player.maxHp > oldMax) {
             this.player.hp += (this.player.maxHp - oldMax);
         }
-        // 如果 MaxHP 減少了 (卸下盔甲)，把當前 HP 砍到上限
         if (this.player.hp > this.player.maxHp) {
             this.player.hp = this.player.maxHp;
         }
-
+        // 更新血條 UI
         this.updateHPUI();
     }
 
-    updateHPUI() {
-        this.hpText.setText(`HP: ${this.player.hp}/${this.player.maxHp}`);
-        if (this.player.hp <= 3) this.hpText.setColor('#ff0000');
-        else this.hpText.setColor('#00ff00');
-    }
-
-    // --- 遊戲邏輯 ---
     processPlayerTurn(action) {
         this.inputLocked = true;
         let turnDuration = 0;
@@ -427,11 +488,7 @@ class MainScene extends Phaser.Scene {
             const { dx, dy } = this.getFacingVector(); const targetX = this.player.gridX + dx; const targetY = this.player.gridY + dy;
             this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 10, y: this.player.sprite.y + dy * 10, duration: 80, yoyo: true });
             const enemy = this.getEnemyAt(targetX, targetY);
-            if (enemy) { 
-                // 使用目前攻擊力
-                this.damageEnemy(enemy, this.player.atk); 
-                this.showEffect(targetX, targetY, 0xffffff); 
-            } 
+            if (enemy) { this.damageEnemy(enemy, this.player.atk); this.showEffect(targetX, targetY, 0xffffff); } 
             else { this.showEffect(targetX, targetY, 0x555555); }
             turnDuration = 160;
         } else if (action.type === 'DASH') {
@@ -450,7 +507,6 @@ class MainScene extends Phaser.Scene {
 
     processEnemiesTurn() {
         if (this.enemies.length === 0) {
-            // 檢查勝利
             this.checkWinCondition();
             this.unlockInput();
             return;
@@ -496,16 +552,12 @@ class MainScene extends Phaser.Scene {
     damageEnemy(enemy, dmg) {
         enemy.hp -= dmg;
         this.tweens.add({ targets: enemy.sprite, alpha: 0.2, duration: 50, yoyo: true, repeat: 3 });
-        
-        // 更新敵人血條
         const hpBar = enemy.sprite.list[1]; 
         if(hpBar) {
-            // 假設敵人最大血量是 3
             let width = (enemy.hp / 3) * 20;
             if (width < 0) width = 0;
             hpBar.width = width;
         }
-
         if (enemy.hp <= 0) { 
             this.enemies = this.enemies.filter(e => e !== enemy); 
             enemy.sprite.destroy(); 
@@ -521,20 +573,17 @@ class MainScene extends Phaser.Scene {
 
     handleEndGame(win) {
         this.currentState = STATE.GAMEOVER;
-        this.inputLocked = true; // 鎖定操作，等待按鈕
+        this.inputLocked = true; 
         
         const txt = win ? "VICTORY!" : "GAME OVER";
         const color = win ? "#00ff00" : "#ff0000";
 
-        // 更新並顯示結束文字
         this.gameOverText.setText(txt);
         this.gameOverText.setColor(color);
         this.gameOverText.setPosition(this.cameras.main.width/2, this.cameras.main.height/2);
         this.gameOverText.setVisible(true);
 
-        // 稍微延遲一下，避免玩家在連打時意外跳過畫面
         this.time.delayedCall(500, () => {
-            // 解鎖輸入，但因為 state 是 GAMEOVER，handleExternalInput 會處理重啟
             this.inputLocked = false; 
         });
     }
@@ -558,7 +607,6 @@ function bindControls() {
             const scene = game.scene.getScene('MainScene');
             if (!scene) return;
             
-            // 特別處理 OPTION
             if (btn.id === 'btn-opt') {
                 scene.handleExternalInput('OPTION');
             } else {
