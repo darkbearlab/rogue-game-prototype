@@ -3,31 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Rogue V14 - Dual Camera Fix</title>
+    <title>Pixel Rogue V16 - Polished</title>
     <style>
-        /* CSS 樣式維持 V11 的響應式設計，這部分運作良好 */
-        body { margin: 0; padding: 0; background-color: #111; overflow: hidden; touch-action: none; height: 100vh; width: 100vw; font-family: monospace; user-select: none; -webkit-tap-highlight-color: transparent; }
+        /* CSS 維持 V15 的完美設定 */
+        body { 
+            margin: 0; padding: 0; background-color: #111; overflow: hidden; touch-action: none; height: 100vh; width: 100vw; font-family: monospace; 
+            -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+        }
         
         #app-container { width: 100%; height: 100%; display: grid; grid-template-columns: 25% 1fr 25%; grid-template-rows: 100%; grid-template-areas: "left screen right"; }
-        
         .joycon-container { background-color: #333; position: relative; display: flex; z-index: 2; box-shadow: inset 0 0 5vmin rgba(0,0,0,0.5); justify-content: center; align-items: center; }
         #joycon-left { grid-area: left; border-right: 0.5vmin solid #222; border-radius: 20px 0 0 20px; }
         #joycon-right { grid-area: right; border-left: 0.5vmin solid #222; border-radius: 0 20px 20px 0; }
-        
         #game-wrapper { grid-area: screen; background: #000; display: flex; justify-content: center; align-items: center; z-index: 1; box-shadow: 0 0 30px rgba(0,0,0,0.8); position: relative; }
         
-        /* 按鈕樣式 */
-        .d-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
-        .action-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
+        .d-pad, .action-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
         .d-btn { position: absolute; background: #222; border-radius: 15%; box-shadow: 0 0.8vmin 0 #111; border: 0.3vmin solid #444; width: 33%; height: 33%; cursor: pointer; }
         .d-btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 #111; background: #1a1a1a; }
         .up { top: 0; left: 33.3%; } .down { bottom: 0; left: 33.3%; } .left { top: 33.3%; left: 0; } .right { top: 33.3%; right: 0; }
         .center-decor { position: absolute; width: 33%; height: 33%; top: 33.3%; left: 33.3%; background: #222; border-radius: 10%; }
-        
         .btn { position: absolute; width: 40%; height: 40%; border-radius: 50%; color: rgba(255,255,255,0.9); font-weight: bold; font-size: 5vmin; display: flex; justify-content: center; align-items: center; box-shadow: 0 0.8vmin 0 rgba(0,0,0,0.6); border: 0.4vmin solid rgba(255,255,255,0.1); cursor: pointer; }
         .btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 rgba(0,0,0,0.6); opacity: 0.9; }
         .btn-a { background: #e74c3c; right: 0; top: 20%; } .btn-b { background: #3498db; right: 40%; bottom: 0; }
-        
         .opt-container { position: absolute; top: 5%; left: 10%; display: flex; flex-direction: column; align-items: center; }
         .btn-opt { width: 8vmin; height: 3vmin; background: #222; border-radius: 2vmin; border: 0.3vmin solid #555; cursor: pointer; display: flex; justify-content: center; align-items: center; }
         .btn-opt:active { background: #000; }
@@ -74,8 +71,9 @@
 const TILE_SIZE = 32; 
 const GRID_W = 20;
 const GRID_H = 15;
-const MOVE_DURATION = 120;
-const TURN_DELAY = 50; 
+const MOVE_DURATION = 100; 
+const PROJECTILE_SPEED = 100; 
+const TURN_DELAY = 20;     
 
 const STATE = { PLAYING: 0, INVENTORY: 1, GAMEOVER: 2 };
 
@@ -103,11 +101,12 @@ class MainScene extends Phaser.Scene {
     create() {
         this.currentState = STATE.PLAYING;
         this.inputLocked = false; 
-        this.enemies = [];        
+        this.isProcessingTurn = false; 
+        this.enemies = [];
+        this.projectiles = [];
         
-        // 分層管理：這能確保 UI 永遠在最上面
-        this.gameGroup = this.add.group(); // 遊戲物件層
-        this.uiGroup = this.add.group();   // UI 物件層
+        this.gameGroup = this.add.group(); 
+        this.uiGroup = this.add.group();
 
         this.inventory = [
             { name: "Power Sword", type: "weapon", val: 2, equipped: false },
@@ -115,12 +114,10 @@ class MainScene extends Phaser.Scene {
         ];
         this.menuIndex = 0; 
 
-        // 1. 建立遊戲內容 (加入 gameGroup)
         this.createLevel();
         this.createPlayer(2, 2);
-        this.spawnEnemy(5); 
+        this.spawnEnemies(6); 
 
-        // 2. 建立 UI (加入 uiGroup)
         this.createHUD();
         this.createInventoryUI();
         this.gameOverText = this.add.text(0, 0, 'GAME OVER', {
@@ -128,20 +125,17 @@ class MainScene extends Phaser.Scene {
         }).setOrigin(0.5).setVisible(false);
         this.uiGroup.add(this.gameOverText);
 
-        // 3. 雙攝影機設定 (關鍵修復！)
-        // 主攝影機：只看遊戲物件，忽略 UI
         this.cameras.main.setZoom(1.5);
         this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
         this.cameras.main.setBackgroundColor('#000000');
         this.cameras.main.ignore(this.uiGroup); 
 
-        // UI 攝影機：只看 UI，忽略遊戲物件，永遠不縮放
         this.uiCamera = this.cameras.add(0, 0, 640, 480);
         this.uiCamera.ignore(this.gameGroup);
         
-        // 初始化
         this.updateStats(); 
         this.setupKeyboard();
+        this.updatePlayerRotation();
     }
 
     createLevel() {
@@ -152,30 +146,22 @@ class MainScene extends Phaser.Scene {
         graphics.strokePath();
         graphics.fillStyle(0x666666);
         for (let y = 0; y < GRID_H; y++) { for (let x = 0; x < GRID_W; x++) { if (LEVEL_DATA[y][x] === 1) graphics.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); }}
-        
-        this.gameGroup.add(graphics); // 加入遊戲層
+        this.gameGroup.add(graphics);
     }
 
     createPlayer(gx, gy) {
         const container = this.add.container(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2);
         const body = this.add.rectangle(0, 0, TILE_SIZE - 6, TILE_SIZE - 6, 0x00ff00).setOrigin(0.5);
-        // 箭頭圖形
         const arrow = this.add.triangle(0, -10, 0, 0, -5, 8, 5, 8, 0xffff00).setOrigin(0.5);
         container.add([body, arrow]);
-        
-        // --- 修正衝刺方向 Bug ---
-        // 將初始 facing 設為 'up'，與圖形方向一致
         this.player = { 
-            gridX: gx, gridY: gy, 
-            facing: 'up', // 預設朝上
-            sprite: container,
-            baseHp: 5, hp: 5, maxHp: 5, atk: 1 
+            gridX: gx, gridY: gy, facing: 'up', 
+            sprite: container, baseHp: 5, hp: 5, maxHp: 5, atk: 1 
         };
-        
-        this.gameGroup.add(container); // 加入遊戲層
+        this.gameGroup.add(container);
     }
 
-    spawnEnemy(count) {
+    spawnEnemies(count) {
         let spawned = 0; let attempts = 0;
         while(spawned < count && attempts < 100) {
             attempts++;
@@ -184,64 +170,61 @@ class MainScene extends Phaser.Scene {
             if (rx === this.player.gridX && ry === this.player.gridY) continue;
             let overlap = this.enemies.find(e => e.gridX === rx && e.gridY === ry);
             if (overlap) continue;
-            this.createSingleEnemy(rx, ry); spawned++;
+            const type = Math.random() < 0.4 ? 'ranged' : 'melee'; 
+            this.createSingleEnemy(rx, ry, type); 
+            spawned++;
         }
     }
 
-    createSingleEnemy(gx, gy) {
+    createSingleEnemy(gx, gy, type) {
         const container = this.add.container(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2);
-        const enemySprite = this.add.rectangle(0, 0, TILE_SIZE - 8, TILE_SIZE - 8, 0xff0000).setOrigin(0.5);
+        const color = type === 'ranged' ? 0x3366ff : 0xdd2222; 
+        const enemySprite = this.add.rectangle(0, 0, TILE_SIZE - 8, TILE_SIZE - 8, color).setOrigin(0.5);
         const hpBar = this.add.rectangle(0, -14, 20, 4, 0xff0000).setOrigin(0.5); 
-        container.add([enemySprite, hpBar]);
         
-        this.enemies.push({ id: this.enemies.length, gridX: gx, gridY: gy, sprite: container, hp: 3 });
-        this.gameGroup.add(container); // 加入遊戲層
+        const aimDot = this.add.text(0, -20, '!', { fontSize: '20px', color: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
+
+        container.add([enemySprite, hpBar, aimDot]);
+        
+        this.enemies.push({ 
+            id: this.enemies.length, gridX: gx, gridY: gy, 
+            sprite: container, hp: 3, type: type, 
+            aimIndicator: aimDot, isCharging: false 
+        });
+        this.gameGroup.add(container);
     }
 
     createHUD() {
         this.hudContainer = this.add.container(10, 10);
-        
         this.hpBarBg = this.add.rectangle(0, 0, 200, 24, 0x330000).setOrigin(0, 0).setStrokeStyle(2, 0xffffff);
         this.hpBarFg = this.add.rectangle(0, 0, 200, 24, 0x00ff00).setOrigin(0, 0);
-        
-        this.hpText = this.add.text(10, 4, 'HP', { 
-            fontSize: '16px', fill: '#ffffff', fontStyle: 'bold', fontFamily: 'monospace',
-            stroke: '#000000', strokeThickness: 3
-        }).setOrigin(0, 0);
-
+        this.hpText = this.add.text(10, 4, 'HP', { fontSize: '16px', fill: '#ffffff', fontStyle: 'bold', fontFamily: 'monospace', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0);
         this.hudContainer.add([this.hpBarBg, this.hpBarFg, this.hpText]);
-        this.uiGroup.add(this.hudContainer); // 加入 UI 層
+        this.uiGroup.add(this.hudContainer);
     }
 
     updateHPUI() {
         if (!this.hpText || !this.hpBarFg) return;
-
         const hpPercent = Phaser.Math.Clamp(this.player.hp / this.player.maxHp, 0, 1);
         this.hpBarFg.width = 200 * hpPercent;
-        
-        if (hpPercent < 0.3) this.hpBarFg.fillColor = 0xff0000;
-        else this.hpBarFg.fillColor = 0x00ff00;
-
+        if (hpPercent < 0.3) this.hpBarFg.fillColor = 0xff0000; else this.hpBarFg.fillColor = 0x00ff00;
         this.hpText.setText(`HP ${this.player.hp}/${this.player.maxHp}`);
     }
 
     createInventoryUI() {
         this.menuContainer = this.add.container(0, 0).setVisible(false);
         const cx = 320; const cy = 240;
-        
         const bg = this.add.rectangle(cx, cy, 400, 300, 0x000000, 0.95).setStrokeStyle(2, 0xffffff);
         this.menuContainer.add(bg);
-        
         const title = this.add.text(cx, cy - 120, "- INVENTORY -", { fontSize: '24px', color: '#fff' }).setOrigin(0.5);
         this.menuContainer.add(title);
-        
         this.menuItems = [];
         for(let i=0; i<5; i++) {
             let txt = this.add.text(cx - 140, cy - 80 + i*40, "", { fontSize: '20px', color: '#fff' });
             this.menuContainer.add(txt);
             this.menuItems.push(txt);
         }
-        this.uiGroup.add(this.menuContainer); // 加入 UI 層
+        this.uiGroup.add(this.menuContainer);
     }
 
     setupKeyboard() {
@@ -256,9 +239,15 @@ class MainScene extends Phaser.Scene {
     handleExternalInput(code) {
         if (this.currentState === STATE.GAMEOVER) { this.scene.restart(); return; }
         if (this.currentState === STATE.INVENTORY) { this.handleMenuInput(code); return; }
-        if (this.inputLocked) return;
-
         if (code === 'OPTION') { this.toggleInventory(); return; }
+
+        if (this.inputLocked) {
+            if (this.isPlayerMoving) {
+                this.skipAnimations();
+            } else {
+                return;
+            }
+        }
 
         let dx = 0; let dy = 0; let newFacing = this.player.facing;
         if (code === 'left') { dx = -1; newFacing = 'left'; }
@@ -278,6 +267,18 @@ class MainScene extends Phaser.Scene {
         }
     }
 
+    skipAnimations() {
+        if (this.playerTween && this.playerTween.isPlaying()) {
+            this.playerTween.stop();
+            this.player.sprite.x = this.player.gridX * TILE_SIZE + TILE_SIZE/2;
+            this.player.sprite.y = this.player.gridY * TILE_SIZE + TILE_SIZE/2;
+        }
+        if (this.turnTimer) {
+            this.turnTimer.remove();
+        }
+        this.processEnemiesTurn(true); 
+    }
+
     toggleInventory() {
         if (this.currentState === STATE.PLAYING) {
             this.currentState = STATE.INVENTORY;
@@ -291,21 +292,12 @@ class MainScene extends Phaser.Scene {
 
     handleMenuInput(code) {
         if (code === 'up') {
-            this.menuIndex--;
-            if (this.menuIndex < 0) this.menuIndex = this.inventory.length - 1;
-            this.updateMenuDisplay();
+            this.menuIndex--; if (this.menuIndex < 0) this.menuIndex = this.inventory.length - 1; this.updateMenuDisplay();
         } else if (code === 'down') {
-            this.menuIndex++;
-            if (this.menuIndex >= this.inventory.length) this.menuIndex = 0;
-            this.updateMenuDisplay();
+            this.menuIndex++; if (this.menuIndex >= this.inventory.length) this.menuIndex = 0; this.updateMenuDisplay();
         } else if (code === 'A') {
-            const item = this.inventory[this.menuIndex];
-            item.equipped = !item.equipped;
-            this.updateStats(); 
-            this.updateMenuDisplay();
-        } else if (code === 'B' || code === 'OPTION') {
-            this.toggleInventory(); 
-        }
+            const item = this.inventory[this.menuIndex]; item.equipped = !item.equipped; this.updateStats(); this.updateMenuDisplay();
+        } else if (code === 'B' || code === 'OPTION') { this.toggleInventory(); }
     }
 
     updateMenuDisplay() {
@@ -322,13 +314,9 @@ class MainScene extends Phaser.Scene {
     }
 
     updateStats() {
-        let totalHpBonus = 0;
-        let totalAtkBonus = 0;
+        let totalHpBonus = 0; let totalAtkBonus = 0;
         this.inventory.forEach(item => {
-            if (item.equipped) {
-                if (item.type === 'weapon') totalAtkBonus += item.val;
-                if (item.type === 'armor') totalHpBonus += item.val;
-            }
+            if (item.equipped) { if (item.type === 'weapon') totalAtkBonus += item.val; if (item.type === 'armor') totalHpBonus += item.val; }
         });
         this.player.atk = 1 + totalAtkBonus;
         const oldMax = this.player.maxHp;
@@ -340,19 +328,21 @@ class MainScene extends Phaser.Scene {
 
     processPlayerTurn(action) {
         this.inputLocked = true;
+        this.isPlayerMoving = true; 
         let turnDuration = 0;
+
         if (action.type === 'MOVE') {
             const targetX = this.player.gridX + action.dx; const targetY = this.player.gridY + action.dy;
             if (LEVEL_DATA[targetY][targetX] === 1 || this.getEnemyAt(targetX, targetY)) { 
                 this.shakePlayer(action.dx, action.dy); turnDuration = 80; 
             } else {
                 this.player.gridX = targetX; this.player.gridY = targetY;
-                this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
+                this.playerTween = this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
                 turnDuration = MOVE_DURATION;
             }
         } else if (action.type === 'ATTACK') {
             const { dx, dy } = this.getFacingVector(); const targetX = this.player.gridX + dx; const targetY = this.player.gridY + dy;
-            this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 10, y: this.player.sprite.y + dy * 10, duration: 80, yoyo: true });
+            this.playerTween = this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 10, y: this.player.sprite.y + dy * 10, duration: 80, yoyo: true });
             const enemy = this.getEnemyAt(targetX, targetY);
             if (enemy) { this.damageEnemy(enemy, this.player.atk); this.showEffect(targetX, targetY, 0xffffff); } 
             else { this.showEffect(targetX, targetY, 0x555555); }
@@ -362,34 +352,145 @@ class MainScene extends Phaser.Scene {
             for (let i = 1; i <= 2; i++) { const tx = this.player.gridX + dx * i; const ty = this.player.gridY + dy * i; if (LEVEL_DATA[ty][tx] !== 1 && !this.getEnemyAt(tx, ty)) { targetX = tx; targetY = ty; } else { break; }}
             if (targetX !== this.player.gridX || targetY !== this.player.gridY) {
                 this.player.gridX = targetX; this.player.gridY = targetY;
-                this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: 100, ease: 'Power2' });
+                this.playerTween = this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: 100, ease: 'Power2' });
                 this.showEffect(this.player.gridX, this.player.gridY, 0x00ff00);
             }
             turnDuration = 100;
         }
-        this.time.delayedCall(turnDuration + TURN_DELAY, () => this.processEnemiesTurn());
+        
+        this.turnTimer = this.time.delayedCall(turnDuration + TURN_DELAY, () => this.processEnemiesTurn(false));
     }
 
-    processEnemiesTurn() {
+    processEnemiesTurn(instant = false) {
+        this.isPlayerMoving = false; 
+        
         if (this.enemies.length === 0) { this.checkWinCondition(); this.unlockInput(); return; }
+        
+        let anyoneMoved = false;
+
         this.enemies.forEach(enemy => {
-            const dx = this.player.gridX - enemy.gridX;
-            const dy = this.player.gridY - enemy.gridY;
-            const dist = Math.abs(dx) + Math.abs(dy); 
-            if (dist === 1) {
-                this.damagePlayer();
-                this.tweens.add({ targets: enemy.sprite, x: enemy.sprite.x + dx * 10, y: enemy.sprite.y + dy * 10, duration: 50, yoyo: true });
-            } else if (dist < 8) { 
-                let moveX = 0; let moveY = 0;
-                if (Math.abs(dx) > Math.abs(dy)) { moveX = dx > 0 ? 1 : -1; } else { moveY = dy > 0 ? 1 : -1; }
-                const targetX = enemy.gridX + moveX; const targetY = enemy.gridY + moveY;
-                if (LEVEL_DATA[targetY][targetX] !== 1 && !(targetX === this.player.gridX && targetY === this.player.gridY) && !this.getEnemyAt(targetX, targetY)) {
-                    enemy.gridX = targetX; enemy.gridY = targetY;
-                    this.tweens.add({ targets: enemy.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
+            if (enemy.type === 'melee') {
+                const dx = this.player.gridX - enemy.gridX; const dy = this.player.gridY - enemy.gridY;
+                const dist = Math.abs(dx) + Math.abs(dy); 
+                if (dist === 1) {
+                    this.damagePlayer();
+                    if(!instant) this.tweens.add({ targets: enemy.sprite, x: enemy.sprite.x + dx * 10, y: enemy.sprite.y + dy * 10, duration: 50, yoyo: true });
+                    anyoneMoved = true;
+                } else if (dist < 8) { 
+                    let moveX = 0; let moveY = 0;
+                    if (Math.abs(dx) > Math.abs(dy)) { moveX = dx > 0 ? 1 : -1; } else { moveY = dy > 0 ? 1 : -1; }
+                    const targetX = enemy.gridX + moveX; const targetY = enemy.gridY + moveY;
+                    if (LEVEL_DATA[targetY][targetX] !== 1 && !(targetX === this.player.gridX && targetY === this.player.gridY) && !this.getEnemyAt(targetX, targetY)) {
+                        enemy.gridX = targetX; enemy.gridY = targetY;
+                        if(instant) {
+                            enemy.sprite.x = targetX * TILE_SIZE + TILE_SIZE/2; enemy.sprite.y = targetY * TILE_SIZE + TILE_SIZE/2;
+                        } else {
+                            this.tweens.add({ targets: enemy.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
+                        }
+                        anyoneMoved = true;
+                    }
+                }
+            } 
+            else if (enemy.type === 'ranged') {
+                const isAligned = (enemy.gridX === this.player.gridX || enemy.gridY === this.player.gridY);
+                
+                if (isAligned) {
+                    if (enemy.isCharging) {
+                        let dirX = 0; let dirY = 0;
+                        if (enemy.gridX === this.player.gridX) dirY = this.player.gridY > enemy.gridY ? 1 : -1;
+                        else dirX = this.player.gridX > enemy.gridX ? 1 : -1;
+                        this.fireProjectile(enemy.gridX, enemy.gridY, dirX, dirY, instant);
+                        enemy.isCharging = false; 
+                        enemy.aimIndicator.setVisible(false);
+                        anyoneMoved = true;
+                    } else {
+                        enemy.isCharging = true;
+                        enemy.aimIndicator.setVisible(true);
+                    }
+                } else {
+                    if (enemy.isCharging) {
+                        enemy.isCharging = false;
+                        enemy.aimIndicator.setVisible(false);
+                    }
+                    if (Math.random() > 0.5) {
+                        const dirs = [{dx:0,dy:1},{dx:0,dy:-1},{dx:1,dy:0},{dx:-1,dy:0}];
+                        const dir = dirs[Phaser.Math.Between(0, 3)];
+                        const targetX = enemy.gridX + dir.dx; const targetY = enemy.gridY + dir.dy;
+                         if (LEVEL_DATA[targetY][targetX] !== 1 && !(targetX === this.player.gridX && targetY === this.player.gridY) && !this.getEnemyAt(targetX, targetY)) {
+                            enemy.gridX = targetX; enemy.gridY = targetY;
+                            if(instant) {
+                                enemy.sprite.x = targetX * TILE_SIZE + TILE_SIZE/2; enemy.sprite.y = targetY * TILE_SIZE + TILE_SIZE/2;
+                            } else {
+                                this.tweens.add({ targets: enemy.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
+                            }
+                            anyoneMoved = true;
+                        }
+                    }
                 }
             }
         });
-        this.time.delayedCall(MOVE_DURATION + 50, () => this.unlockInput());
+
+        const delay = (instant || !anyoneMoved) ? 0 : MOVE_DURATION + 20;
+        if(instant) {
+            this.processProjectilesTurn(true);
+        } else {
+            this.time.delayedCall(delay, () => this.processProjectilesTurn(false));
+        }
+    }
+
+    // --- 修正重點：飛彈初始隱形，防止鬼影 ---
+    fireProjectile(startGx, startGy, dirX, dirY, instant) {
+        const sprite = this.add.rectangle(startGx * TILE_SIZE + TILE_SIZE/2, startGy * TILE_SIZE + TILE_SIZE/2, 10, 10, 0xffff00).setAlpha(0);
+        this.gameGroup.add(sprite);
+        
+        // 瞬間淡入
+        this.tweens.add({ targets: sprite, alpha: 1, duration: 50 });
+
+        this.projectiles.push({ gridX: startGx, gridY: startGy, dirX: dirX, dirY: dirY, sprite: sprite });
+    }
+
+    processProjectilesTurn(instant = false) {
+        if (this.projectiles.length === 0) { this.unlockInput(); return; }
+
+        let activeProjectiles = [];
+        let hitOccurred = false;
+
+        this.projectiles.forEach(proj => {
+            const nextX = proj.gridX + proj.dirX;
+            const nextY = proj.gridY + proj.dirY;
+
+            if (LEVEL_DATA[nextY][nextX] === 1) {
+                this.showEffect(nextX, nextY, 0xaaaaaa); proj.sprite.destroy(); hitOccurred = true; return; 
+            }
+            if (nextX === this.player.gridX && nextY === this.player.gridY) {
+                this.damagePlayer(); this.showEffect(nextX, nextY, 0xff0000); proj.sprite.destroy(); hitOccurred = true; return;
+            }
+            const hitEnemy = this.getEnemyAt(nextX, nextY);
+            if (hitEnemy) {
+                this.damageEnemy(hitEnemy, 1); this.showEffect(nextX, nextY, 0xffffff); proj.sprite.destroy(); hitOccurred = true; return;
+            }
+
+            proj.gridX = nextX; proj.gridY = nextY;
+            if(instant) {
+                proj.sprite.x = nextX * TILE_SIZE + TILE_SIZE/2; proj.sprite.y = nextY * TILE_SIZE + TILE_SIZE/2;
+            } else {
+                this.tweens.add({ targets: proj.sprite, x: nextX * TILE_SIZE + TILE_SIZE/2, y: nextY * TILE_SIZE + TILE_SIZE/2, duration: PROJECTILE_SPEED, ease: 'Linear' });
+            }
+            activeProjectiles.push(proj); 
+        });
+
+        this.projectiles = activeProjectiles;
+
+        if(instant) {
+             if (this.projectiles.length > 0) this.processProjectilesTurn(true);
+             else this.unlockInput();
+        } else {
+            const delay = hitOccurred ? 150 : PROJECTILE_SPEED + 50;
+            this.time.delayedCall(delay, () => {
+                 if (this.projectiles.length > 0) this.processProjectilesTurn(false);
+                 else this.unlockInput();
+            });
+        }
     }
 
     damagePlayer() {
@@ -407,15 +508,15 @@ class MainScene extends Phaser.Scene {
         this.currentState = STATE.GAMEOVER; this.inputLocked = true; 
         const txt = win ? "VICTORY!" : "GAME OVER"; const color = win ? "#00ff00" : "#ff0000";
         this.gameOverText.setText(txt); this.gameOverText.setColor(color); 
-        // 因為 Text 現在是 UI Layer，座標是螢幕相對座標
-        this.gameOverText.setPosition(320, 240); 
-        this.gameOverText.setVisible(true);
+        this.gameOverText.setPosition(320, 240); this.gameOverText.setVisible(true);
         this.time.delayedCall(500, () => { this.inputLocked = false; });
     }
+    
+    // --- 修正重點：特效初始隱形 (alpha 0)，防止第一幀閃爍 ---
     showEffect(gx, gy, color) {
-        const effect = this.add.rectangle(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, color, 0.7);
-        this.gameGroup.add(effect); // 特效加入遊戲層
-        this.tweens.add({ targets: effect, scale: 1.5, alpha: 0, duration: 200, onComplete: () => effect.destroy() });
+        const effect = this.add.rectangle(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, color, 0); 
+        this.gameGroup.add(effect);
+        this.tweens.add({ targets: effect, scale: { from: 1, to: 1.5 }, alpha: { from: 0.7, to: 0 }, duration: 200, onComplete: () => effect.destroy() });
     }
     shakePlayer(dx, dy) { this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 5, y: this.player.sprite.y + dy * 5, duration: 50, yoyo: true }); }
     unlockInput() { if(this.currentState === STATE.PLAYING) this.inputLocked = false; }
