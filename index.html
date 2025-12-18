@@ -3,27 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Rogue V12 - Bug Fixes</title>
+    <title>Pixel Rogue V14 - Dual Camera Fix</title>
     <style>
+        /* CSS 樣式維持 V11 的響應式設計，這部分運作良好 */
         body { margin: 0; padding: 0; background-color: #111; overflow: hidden; touch-action: none; height: 100vh; width: 100vw; font-family: monospace; user-select: none; -webkit-tap-highlight-color: transparent; }
+        
         #app-container { width: 100%; height: 100%; display: grid; grid-template-columns: 25% 1fr 25%; grid-template-rows: 100%; grid-template-areas: "left screen right"; }
+        
         .joycon-container { background-color: #333; position: relative; display: flex; z-index: 2; box-shadow: inset 0 0 5vmin rgba(0,0,0,0.5); justify-content: center; align-items: center; }
         #joycon-left { grid-area: left; border-right: 0.5vmin solid #222; border-radius: 20px 0 0 20px; }
         #joycon-right { grid-area: right; border-left: 0.5vmin solid #222; border-radius: 0 20px 20px 0; }
+        
         #game-wrapper { grid-area: screen; background: #000; display: flex; justify-content: center; align-items: center; z-index: 1; box-shadow: 0 0 30px rgba(0,0,0,0.8); position: relative; }
+        
+        /* 按鈕樣式 */
         .d-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
         .action-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
         .d-btn { position: absolute; background: #222; border-radius: 15%; box-shadow: 0 0.8vmin 0 #111; border: 0.3vmin solid #444; width: 33%; height: 33%; cursor: pointer; }
         .d-btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 #111; background: #1a1a1a; }
         .up { top: 0; left: 33.3%; } .down { bottom: 0; left: 33.3%; } .left { top: 33.3%; left: 0; } .right { top: 33.3%; right: 0; }
         .center-decor { position: absolute; width: 33%; height: 33%; top: 33.3%; left: 33.3%; background: #222; border-radius: 10%; }
+        
         .btn { position: absolute; width: 40%; height: 40%; border-radius: 50%; color: rgba(255,255,255,0.9); font-weight: bold; font-size: 5vmin; display: flex; justify-content: center; align-items: center; box-shadow: 0 0.8vmin 0 rgba(0,0,0,0.6); border: 0.4vmin solid rgba(255,255,255,0.1); cursor: pointer; }
         .btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 rgba(0,0,0,0.6); opacity: 0.9; }
         .btn-a { background: #e74c3c; right: 0; top: 20%; } .btn-b { background: #3498db; right: 40%; bottom: 0; }
+        
         .opt-container { position: absolute; top: 5%; left: 10%; display: flex; flex-direction: column; align-items: center; }
         .btn-opt { width: 8vmin; height: 3vmin; background: #222; border-radius: 2vmin; border: 0.3vmin solid #555; cursor: pointer; display: flex; justify-content: center; align-items: center; }
         .btn-opt:active { background: #000; }
         .opt-label { color: #888; font-size: 2vmin; margin-top: 0.5vmin; font-weight: bold; letter-spacing: 1px; }
+
         @media (orientation: portrait) {
             #app-container { grid-template-columns: 50% 50%; grid-template-rows: 60% 40%; grid-template-areas: "screen screen" "left right"; }
             .joycon-container { border: none; border-radius: 0; background-color: #444; box-shadow: none; border-top: 0.5vmin solid #222; }
@@ -48,9 +57,7 @@
                 <div class="d-btn right" data-key="right"></div>
             </div>
         </div>
-
         <div id="game-wrapper"></div>
-
         <div id="joycon-right" class="joycon-container">
             <div class="opt-container">
                 <div class="btn-opt" id="btn-opt"></div>
@@ -64,7 +71,6 @@
     </div>
 
 <script>
-// --- V12 參數 ---
 const TILE_SIZE = 32; 
 const GRID_W = 20;
 const GRID_H = 15;
@@ -99,32 +105,42 @@ class MainScene extends Phaser.Scene {
         this.inputLocked = false; 
         this.enemies = [];        
         
+        // 分層管理：這能確保 UI 永遠在最上面
+        this.gameGroup = this.add.group(); // 遊戲物件層
+        this.uiGroup = this.add.group();   // UI 物件層
+
         this.inventory = [
             { name: "Power Sword", type: "weapon", val: 2, equipped: false },
             { name: "Heavy Plate", type: "armor", val: 20, equipped: false }
         ];
         this.menuIndex = 0; 
 
+        // 1. 建立遊戲內容 (加入 gameGroup)
         this.createLevel();
         this.createPlayer(2, 2);
         this.spawnEnemy(5); 
-        
-        // --- 修正點 1: 確保只呼叫一次 createHUD，並不被舊程式碼覆蓋 ---
+
+        // 2. 建立 UI (加入 uiGroup)
         this.createHUD();
-
-        this.updateStats(); 
         this.createInventoryUI();
-
-        // (已移除這裡導致衝突的舊 hpText 定義)
-
         this.gameOverText = this.add.text(0, 0, 'GAME OVER', {
             fontSize: '40px', color: '#ff0000', backgroundColor: '#000000dd', padding: {x:20, y:10}
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
+        }).setOrigin(0.5).setVisible(false);
+        this.uiGroup.add(this.gameOverText);
 
+        // 3. 雙攝影機設定 (關鍵修復！)
+        // 主攝影機：只看遊戲物件，忽略 UI
         this.cameras.main.setZoom(1.5);
         this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
         this.cameras.main.setBackgroundColor('#000000');
+        this.cameras.main.ignore(this.uiGroup); 
 
+        // UI 攝影機：只看 UI，忽略遊戲物件，永遠不縮放
+        this.uiCamera = this.cameras.add(0, 0, 640, 480);
+        this.uiCamera.ignore(this.gameGroup);
+        
+        // 初始化
+        this.updateStats(); 
         this.setupKeyboard();
     }
 
@@ -136,21 +152,27 @@ class MainScene extends Phaser.Scene {
         graphics.strokePath();
         graphics.fillStyle(0x666666);
         for (let y = 0; y < GRID_H; y++) { for (let x = 0; x < GRID_W; x++) { if (LEVEL_DATA[y][x] === 1) graphics.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); }}
+        
+        this.gameGroup.add(graphics); // 加入遊戲層
     }
 
     createPlayer(gx, gy) {
         const container = this.add.container(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2);
         const body = this.add.rectangle(0, 0, TILE_SIZE - 6, TILE_SIZE - 6, 0x00ff00).setOrigin(0.5);
+        // 箭頭圖形
         const arrow = this.add.triangle(0, -10, 0, 0, -5, 8, 5, 8, 0xffff00).setOrigin(0.5);
         container.add([body, arrow]);
         
-        // --- 修正點 2: 基礎血量調降為 5，讓沒穿裝備時更容易死 ---
+        // --- 修正衝刺方向 Bug ---
+        // 將初始 facing 設為 'up'，與圖形方向一致
         this.player = { 
             gridX: gx, gridY: gy, 
-            facing: 'down', 
+            facing: 'up', // 預設朝上
             sprite: container,
             baseHp: 5, hp: 5, maxHp: 5, atk: 1 
         };
+        
+        this.gameGroup.add(container); // 加入遊戲層
     }
 
     spawnEnemy(count) {
@@ -171,27 +193,27 @@ class MainScene extends Phaser.Scene {
         const enemySprite = this.add.rectangle(0, 0, TILE_SIZE - 8, TILE_SIZE - 8, 0xff0000).setOrigin(0.5);
         const hpBar = this.add.rectangle(0, -14, 20, 4, 0xff0000).setOrigin(0.5); 
         container.add([enemySprite, hpBar]);
+        
         this.enemies.push({ id: this.enemies.length, gridX: gx, gridY: gy, sprite: container, hp: 3 });
+        this.gameGroup.add(container); // 加入遊戲層
     }
 
-    // --- HUD 系統 ---
     createHUD() {
-        this.hudContainer = this.add.container(10, 10).setScrollFactor(0).setDepth(100);
-        // 血條背景
-        this.hpBarBg = this.add.rectangle(0, 0, 200, 20, 0x330000).setOrigin(0, 0).setStrokeStyle(1, 0xffffff);
-        // 血條前景 (綠色)
-        this.hpBarFg = this.add.rectangle(0, 0, 200, 20, 0x00ff00).setOrigin(0, 0);
-        // 文字
-        this.hpText = this.add.text(10, 2, '', { 
-            fontSize: '14px', fill: '#ffffff', fontStyle: 'bold', fontFamily: 'monospace',
+        this.hudContainer = this.add.container(10, 10);
+        
+        this.hpBarBg = this.add.rectangle(0, 0, 200, 24, 0x330000).setOrigin(0, 0).setStrokeStyle(2, 0xffffff);
+        this.hpBarFg = this.add.rectangle(0, 0, 200, 24, 0x00ff00).setOrigin(0, 0);
+        
+        this.hpText = this.add.text(10, 4, 'HP', { 
+            fontSize: '16px', fill: '#ffffff', fontStyle: 'bold', fontFamily: 'monospace',
             stroke: '#000000', strokeThickness: 3
         }).setOrigin(0, 0);
 
         this.hudContainer.add([this.hpBarBg, this.hpBarFg, this.hpText]);
+        this.uiGroup.add(this.hudContainer); // 加入 UI 層
     }
 
     updateHPUI() {
-        // 確保 hpText 存在才更新 (避免初始化順序問題)
         if (!this.hpText || !this.hpBarFg) return;
 
         const hpPercent = Phaser.Math.Clamp(this.player.hp / this.player.maxHp, 0, 1);
@@ -203,19 +225,23 @@ class MainScene extends Phaser.Scene {
         this.hpText.setText(`HP ${this.player.hp}/${this.player.maxHp}`);
     }
 
-
     createInventoryUI() {
-        this.menuContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(150).setVisible(false);
-        const bg = this.add.rectangle(320, 240, 400, 300, 0x000000, 0.9).setStrokeStyle(2, 0xffffff);
+        this.menuContainer = this.add.container(0, 0).setVisible(false);
+        const cx = 320; const cy = 240;
+        
+        const bg = this.add.rectangle(cx, cy, 400, 300, 0x000000, 0.95).setStrokeStyle(2, 0xffffff);
         this.menuContainer.add(bg);
-        const title = this.add.text(320, 120, "- INVENTORY -", { fontSize: '24px', color: '#fff' }).setOrigin(0.5);
+        
+        const title = this.add.text(cx, cy - 120, "- INVENTORY -", { fontSize: '24px', color: '#fff' }).setOrigin(0.5);
         this.menuContainer.add(title);
+        
         this.menuItems = [];
         for(let i=0; i<5; i++) {
-            let txt = this.add.text(180, 160 + i*40, "", { fontSize: '20px', color: '#fff' });
+            let txt = this.add.text(cx - 140, cy - 80 + i*40, "", { fontSize: '20px', color: '#fff' });
             this.menuContainer.add(txt);
             this.menuItems.push(txt);
         }
+        this.uiGroup.add(this.menuContainer); // 加入 UI 層
     }
 
     setupKeyboard() {
@@ -228,20 +254,11 @@ class MainScene extends Phaser.Scene {
     }
 
     handleExternalInput(code) {
-        if (this.currentState === STATE.GAMEOVER) {
-            this.scene.restart();
-            return;
-        }
-        if (this.currentState === STATE.INVENTORY) {
-            this.handleMenuInput(code);
-            return;
-        }
+        if (this.currentState === STATE.GAMEOVER) { this.scene.restart(); return; }
+        if (this.currentState === STATE.INVENTORY) { this.handleMenuInput(code); return; }
         if (this.inputLocked) return;
 
-        if (code === 'OPTION') {
-            this.toggleInventory();
-            return;
-        }
+        if (code === 'OPTION') { this.toggleInventory(); return; }
 
         let dx = 0; let dy = 0; let newFacing = this.player.facing;
         if (code === 'left') { dx = -1; newFacing = 'left'; }
@@ -313,29 +330,21 @@ class MainScene extends Phaser.Scene {
                 if (item.type === 'armor') totalHpBonus += item.val;
             }
         });
-
         this.player.atk = 1 + totalAtkBonus;
         const oldMax = this.player.maxHp;
         this.player.maxHp = this.player.baseHp + totalHpBonus;
-        
-        if (this.player.maxHp > oldMax) {
-            this.player.hp += (this.player.maxHp - oldMax);
-        }
-        if (this.player.hp > this.player.maxHp) {
-            this.player.hp = this.player.maxHp;
-        }
+        if (this.player.maxHp > oldMax) { this.player.hp += (this.player.maxHp - oldMax); }
+        if (this.player.hp > this.player.maxHp) { this.player.hp = this.player.maxHp; }
         this.updateHPUI();
     }
 
     processPlayerTurn(action) {
         this.inputLocked = true;
         let turnDuration = 0;
-
         if (action.type === 'MOVE') {
             const targetX = this.player.gridX + action.dx; const targetY = this.player.gridY + action.dy;
             if (LEVEL_DATA[targetY][targetX] === 1 || this.getEnemyAt(targetX, targetY)) { 
-                this.shakePlayer(action.dx, action.dy); 
-                turnDuration = 80; 
+                this.shakePlayer(action.dx, action.dy); turnDuration = 80; 
             } else {
                 this.player.gridX = targetX; this.player.gridY = targetY;
                 this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
@@ -358,95 +367,54 @@ class MainScene extends Phaser.Scene {
             }
             turnDuration = 100;
         }
-
         this.time.delayedCall(turnDuration + TURN_DELAY, () => this.processEnemiesTurn());
     }
 
     processEnemiesTurn() {
-        if (this.enemies.length === 0) {
-            this.checkWinCondition();
-            this.unlockInput();
-            return;
-        }
-
+        if (this.enemies.length === 0) { this.checkWinCondition(); this.unlockInput(); return; }
         this.enemies.forEach(enemy => {
             const dx = this.player.gridX - enemy.gridX;
             const dy = this.player.gridY - enemy.gridY;
             const dist = Math.abs(dx) + Math.abs(dy); 
-
             if (dist === 1) {
                 this.damagePlayer();
-                this.tweens.add({
-                    targets: enemy.sprite, x: enemy.sprite.x + dx * 10, y: enemy.sprite.y + dy * 10, duration: 50, yoyo: true
-                });
+                this.tweens.add({ targets: enemy.sprite, x: enemy.sprite.x + dx * 10, y: enemy.sprite.y + dy * 10, duration: 50, yoyo: true });
             } else if (dist < 8) { 
                 let moveX = 0; let moveY = 0;
                 if (Math.abs(dx) > Math.abs(dy)) { moveX = dx > 0 ? 1 : -1; } else { moveY = dy > 0 ? 1 : -1; }
-
-                const targetX = enemy.gridX + moveX;
-                const targetY = enemy.gridY + moveY;
-                
-                if (LEVEL_DATA[targetY][targetX] !== 1 && 
-                    !(targetX === this.player.gridX && targetY === this.player.gridY) &&
-                    !this.getEnemyAt(targetX, targetY)) {
-                    
+                const targetX = enemy.gridX + moveX; const targetY = enemy.gridY + moveY;
+                if (LEVEL_DATA[targetY][targetX] !== 1 && !(targetX === this.player.gridX && targetY === this.player.gridY) && !this.getEnemyAt(targetX, targetY)) {
                     enemy.gridX = targetX; enemy.gridY = targetY;
                     this.tweens.add({ targets: enemy.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
                 }
             }
         });
-
         this.time.delayedCall(MOVE_DURATION + 50, () => this.unlockInput());
     }
 
     damagePlayer() {
-        this.player.hp--;
-        this.updateHPUI();
-        this.cameras.main.flash(100, 255, 0, 0);
+        this.player.hp--; this.updateHPUI(); this.cameras.main.flash(100, 255, 0, 0);
         if (this.player.hp <= 0) { this.handleEndGame(false); }
     }
-
     damageEnemy(enemy, dmg) {
-        enemy.hp -= dmg;
-        this.tweens.add({ targets: enemy.sprite, alpha: 0.2, duration: 50, yoyo: true, repeat: 3 });
+        enemy.hp -= dmg; this.tweens.add({ targets: enemy.sprite, alpha: 0.2, duration: 50, yoyo: true, repeat: 3 });
         const hpBar = enemy.sprite.list[1]; 
-        if(hpBar) {
-            let width = (enemy.hp / 3) * 20;
-            if (width < 0) width = 0;
-            hpBar.width = width;
-        }
-        if (enemy.hp <= 0) { 
-            this.enemies = this.enemies.filter(e => e !== enemy); 
-            enemy.sprite.destroy(); 
-            this.checkWinCondition();
-        }
+        if(hpBar) { let width = (enemy.hp / 3) * 20; if (width < 0) width = 0; hpBar.width = width; }
+        if (enemy.hp <= 0) { this.enemies = this.enemies.filter(e => e !== enemy); enemy.sprite.destroy(); this.checkWinCondition(); }
     }
-
-    checkWinCondition() {
-        if (this.enemies.length === 0) {
-            this.handleEndGame(true);
-        }
-    }
-
+    checkWinCondition() { if (this.enemies.length === 0) { this.handleEndGame(true); } }
     handleEndGame(win) {
-        this.currentState = STATE.GAMEOVER;
-        this.inputLocked = true; 
-        
-        const txt = win ? "VICTORY!" : "GAME OVER";
-        const color = win ? "#00ff00" : "#ff0000";
-
-        this.gameOverText.setText(txt);
-        this.gameOverText.setColor(color);
-        this.gameOverText.setPosition(this.cameras.main.width/2, this.cameras.main.height/2);
+        this.currentState = STATE.GAMEOVER; this.inputLocked = true; 
+        const txt = win ? "VICTORY!" : "GAME OVER"; const color = win ? "#00ff00" : "#ff0000";
+        this.gameOverText.setText(txt); this.gameOverText.setColor(color); 
+        // 因為 Text 現在是 UI Layer，座標是螢幕相對座標
+        this.gameOverText.setPosition(320, 240); 
         this.gameOverText.setVisible(true);
-
-        this.time.delayedCall(500, () => {
-            this.inputLocked = false; 
-        });
+        this.time.delayedCall(500, () => { this.inputLocked = false; });
     }
-
     showEffect(gx, gy, color) {
         const effect = this.add.rectangle(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, color, 0.7);
+        this.gameGroup.add(effect); // 特效加入遊戲層
         this.tweens.add({ targets: effect, scale: 1.5, alpha: 0, duration: 200, onComplete: () => effect.destroy() });
     }
     shakePlayer(dx, dy) { this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 5, y: this.player.sprite.y + dy * 5, duration: 50, yoyo: true }); }
@@ -463,20 +431,14 @@ function bindControls() {
             e.preventDefault(); 
             const scene = game.scene.getScene('MainScene');
             if (!scene) return;
-            
-            if (btn.id === 'btn-opt') {
-                scene.handleExternalInput('OPTION');
-            } else {
-                const key = btn.getAttribute('data-key');
-                if (key) scene.handleExternalInput(key);
-            }
+            if (btn.id === 'btn-opt') { scene.handleExternalInput('OPTION'); } 
+            else { const key = btn.getAttribute('data-key'); if (key) scene.handleExternalInput(key); }
         });
     });
 }
 
 const config = {
-    type: Phaser.AUTO, parent: 'game-wrapper',
-    width: 640, height: 480, backgroundColor: '#000000',
+    type: Phaser.AUTO, parent: 'game-wrapper', width: 640, height: 480, backgroundColor: '#000000',
     scene: MainScene, scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
 };
 
