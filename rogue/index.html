@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Rogue V10 - Inventory & Equipment</title>
+    <style>
+        /* --- 1. 基礎設定 (V7 混合佈局 - 不變) --- */
+        body { 
+            margin: 0; padding: 0; 
+            background-color: #111; 
+            overflow: hidden; 
+            touch-action: none;
+            height: 100vh; width: 100vw;
+            font-family: monospace;
+            user-select: none;
+        }
+
+        #app-container {
+            width: 100%; height: 100%;
+            display: grid;
+            grid-template-columns: 25% 1fr 25%;
+            grid-template-rows: 100%;
+            grid-template-areas: "left screen right";
+        }
+
+        .joycon-container {
+            background-color: #333;
+            position: relative; display: flex; z-index: 2;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        #joycon-left { 
+            grid-area: left; 
+            border-right: 4px solid #222; border-radius: 20px 0 0 20px;
+            align-items: flex-start; justify-content: center; padding-top: 15vh; 
+        }
+
+        #joycon-right { 
+            grid-area: right; 
+            border-left: 4px solid #222; border-radius: 0 20px 20px 0;
+            align-items: flex-start; justify-content: center; padding-top: 15vh;
+        }
+
+        #game-wrapper {
+            grid-area: screen;
+            background: #000;
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            position: relative; 
+        }
+
+        @media (orientation: portrait) {
+            #app-container {
+                grid-template-columns: 50% 50%;
+                grid-template-rows: 60% 40%; 
+                grid-template-areas: "screen screen" "left right";
+            }
+            .joycon-container {
+                border: none; border-radius: 0; background-color: #444; box-shadow: none;
+                border-top: 4px solid #222;
+                align-items: center; justify-content: center; padding-top: 0;
+            }
+            #joycon-left { justify-content: flex-end; padding-right: 20px; }
+            #joycon-right { justify-content: flex-start; padding-left: 20px; }
+        }
+
+        /* --- 按鈕樣式 --- */
+        .d-pad { position: relative; width: 180px; height: 180px; transform: scale(0.9); }
+        .d-btn { position: absolute; background: #222; border-radius: 8px; box-shadow: 0 6px 0 #111; border: 2px solid #444; }
+        .d-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #111; background: #1a1a1a; }
+        .up { width: 60px; height: 60px; top: 0; left: 60px; }
+        .down { width: 60px; height: 60px; bottom: 0; left: 60px; }
+        .left { width: 60px; height: 60px; top: 60px; left: 0; }
+        .right { width: 60px; height: 60px; top: 60px; right: 0; }
+        .center-decor { position: absolute; width: 60px; height: 60px; top: 60px; left: 60px; background: #222; border-radius: 4px; }
+
+        .action-pad { position: relative; width: 200px; height: 200px; transform: scale(0.9); }
+        .btn {
+            width: 80px; height: 80px; border-radius: 50%; position: absolute;
+            color: rgba(255,255,255,0.9); font-size: 32px; font-weight: bold;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 6px 0 rgba(0,0,0,0.6); border: 3px solid rgba(255,255,255,0.1);
+        }
+        .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,0.6); opacity: 0.9; }
+        .btn-a { background: #e74c3c; right: 10px; top: 50px; } 
+        .btn-b { background: #3498db; right: 100px; top: 130px; }
+
+        .opt-container {
+            position: absolute; top: 20px; left: 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .btn-opt {
+            width: 50px; height: 20px; background: #222; border-radius: 10px;
+            border: 2px solid #555; cursor: pointer; display: flex; justify-content: center; align-items: center;
+        }
+        .btn-opt:active { background: #000; }
+        .opt-label { color: #888; font-size: 10px; margin-top: 5px; font-weight: bold; letter-spacing: 1px; }
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+
+    <div id="app-container">
+        <div id="joycon-left" class="joycon-container">
+            <div class="d-pad">
+                <div class="center-decor"></div>
+                <div class="d-btn up" data-key="up"></div>
+                <div class="d-btn down" data-key="down"></div>
+                <div class="d-btn left" data-key="left"></div>
+                <div class="d-btn right" data-key="right"></div>
+            </div>
+        </div>
+
+        <div id="game-wrapper"></div>
+
+        <div id="joycon-right" class="joycon-container">
+            <div class="opt-container">
+                <div class="btn-opt" id="btn-opt"></div>
+                <div class="opt-label">OPTION</div>
+            </div>
+            <div class="action-pad">
+                <div class="btn btn-b" data-key="B">B</div>
+                <div class="btn btn-a" data-key="A">A</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// --- V10 參數設定 ---
+const TILE_SIZE = 32; 
+const GRID_W = 20;
+const GRID_H = 15;
+const MOVE_DURATION = 120;
+const TURN_DELAY = 50; 
+
+// 遊戲狀態列舉
+const STATE = {
+    PLAYING: 0,
+    INVENTORY: 1,
+    GAMEOVER: 2
+};
+
+const LEVEL_DATA = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+class MainScene extends Phaser.Scene {
+    constructor() { super({ key: 'MainScene' }); }
+
+    create() {
+        this.currentState = STATE.PLAYING;
+        this.inputLocked = false; 
+        this.enemies = [];        
+        
+        // --- 道具資料庫 ---
+        this.inventory = [
+            { name: "Power Sword", type: "weapon", val: 2, equipped: false },
+            { name: "Heavy Plate", type: "armor", val: 20, equipped: false }
+        ];
+        this.menuIndex = 0; // 當前選到的道具索引
+
+        this.createLevel();
+        this.createPlayer(2, 2);
+        this.spawnEnemy(5); // 生成5個敵人
+        
+        // UI: HP 顯示
+        this.hpText = this.add.text(10, 10, '', { 
+            fontSize: '20px', fill: '#00ff00', fontStyle: 'bold', fontFamily: 'monospace',
+            backgroundColor: '#000000aa'
+        }).setScrollFactor(0).setDepth(100);
+        this.updateStats(); // 初始化數值顯示
+
+        // UI: 選單介面 (一開始隱藏)
+        this.createInventoryUI();
+
+        // UI: 遊戲結束介面 (一開始隱藏)
+        this.gameOverText = this.add.text(0, 0, 'GAME OVER', {
+            fontSize: '40px', color: '#ff0000', backgroundColor: '#000000dd', padding: {x:20, y:10}
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(200).setVisible(false);
+
+        // 攝影機
+        this.cameras.main.setZoom(1.5);
+        this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
+        this.cameras.main.setBackgroundColor('#000000');
+
+        this.setupKeyboard();
+    }
+
+    createLevel() {
+        const graphics = this.add.graphics();
+        graphics.lineStyle(1, 0x222222);
+        for (let x = 0; x <= GRID_W * TILE_SIZE; x += TILE_SIZE) { graphics.moveTo(x, 0); graphics.lineTo(x, GRID_H * TILE_SIZE); }
+        for (let y = 0; y <= GRID_H * TILE_SIZE; y += TILE_SIZE) { graphics.moveTo(0, y); graphics.lineTo(GRID_W * TILE_SIZE, y); }
+        graphics.strokePath();
+        graphics.fillStyle(0x666666);
+        for (let y = 0; y < GRID_H; y++) { for (let x = 0; x < GRID_W; x++) { if (LEVEL_DATA[y][x] === 1) graphics.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); }}
+    }
+
+    createPlayer(gx, gy) {
+        const container = this.add.container(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2);
+        const body = this.add.rectangle(0, 0, TILE_SIZE - 6, TILE_SIZE - 6, 0x00ff00).setOrigin(0.5);
+        const arrow = this.add.triangle(0, -10, 0, 0, -5, 8, 5, 8, 0xffff00).setOrigin(0.5);
+        container.add([body, arrow]);
+        
+        this.player = { 
+            gridX: gx, gridY: gy, 
+            facing: 'down', 
+            sprite: container,
+            baseHp: 10, // 基礎血量
+            hp: 10, 
+            maxHp: 10,
+            atk: 1      // 基礎攻擊力
+        };
+    }
+
+    spawnEnemy(count) {
+        let spawned = 0; let attempts = 0;
+        while(spawned < count && attempts < 100) {
+            attempts++;
+            let rx = Phaser.Math.Between(1, GRID_W - 2); let ry = Phaser.Math.Between(1, GRID_H - 2);
+            if (LEVEL_DATA[ry][rx] === 1) continue;
+            if (rx === this.player.gridX && ry === this.player.gridY) continue;
+            let overlap = this.enemies.find(e => e.gridX === rx && e.gridY === ry);
+            if (overlap) continue;
+            this.createSingleEnemy(rx, ry); spawned++;
+        }
+    }
+
+    createSingleEnemy(gx, gy) {
+        const container = this.add.container(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2);
+        const enemySprite = this.add.rectangle(0, 0, TILE_SIZE - 8, TILE_SIZE - 8, 0xff0000).setOrigin(0.5);
+        const hpBar = this.add.rectangle(0, -14, 20, 4, 0xff0000).setOrigin(0.5); 
+        container.add([enemySprite, hpBar]);
+        this.enemies.push({ id: this.enemies.length, gridX: gx, gridY: gy, sprite: container, hp: 3 });
+    }
+
+    // --- 道具 UI 建立 ---
+    createInventoryUI() {
+        this.menuContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(150).setVisible(false);
+        
+        // 背景黑框
+        const bg = this.add.rectangle(320, 240, 400, 300, 0x000000, 0.9).setStrokeStyle(2, 0xffffff);
+        this.menuContainer.add(bg);
+
+        // 標題
+        const title = this.add.text(320, 120, "- INVENTORY -", { fontSize: '24px', color: '#fff' }).setOrigin(0.5);
+        this.menuContainer.add(title);
+
+        // 列表文字物件 (預先建立)
+        this.menuItems = [];
+        for(let i=0; i<5; i++) {
+            let txt = this.add.text(180, 160 + i*40, "", { fontSize: '20px', color: '#fff' });
+            this.menuContainer.add(txt);
+            this.menuItems.push(txt);
+        }
+    }
+
+    // --- 核心輸入處理 (根據狀態分流) ---
+    setupKeyboard() {
+        this.input.keyboard.on('keydown-W', () => this.handleExternalInput('up'));
+        this.input.keyboard.on('keydown-S', () => this.handleExternalInput('down'));
+        this.input.keyboard.on('keydown-A', () => this.handleExternalInput('left'));
+        this.input.keyboard.on('keydown-D', () => this.handleExternalInput('right'));
+        this.input.keyboard.on('keydown-J', () => this.handleExternalInput('A'));
+        this.input.keyboard.on('keydown-K', () => this.handleExternalInput('B'));
+    }
+
+    handleExternalInput(code) {
+        // 1. 遊戲結束狀態：任意鍵重啟
+        if (this.currentState === STATE.GAMEOVER) {
+            this.scene.restart();
+            return;
+        }
+
+        // 2. 選單狀態
+        if (this.currentState === STATE.INVENTORY) {
+            this.handleMenuInput(code);
+            return;
+        }
+
+        // 3. 遊玩狀態
+        if (this.inputLocked) return;
+
+        // OPTION 鍵開啟選單
+        if (code === 'OPTION') {
+            this.toggleInventory();
+            return;
+        }
+
+        let dx = 0; let dy = 0; let newFacing = this.player.facing;
+        if (code === 'left') { dx = -1; newFacing = 'left'; }
+        else if (code === 'right') { dx = 1; newFacing = 'right'; }
+        else if (code === 'up') { dy = -1; newFacing = 'up'; }
+        else if (code === 'down') { dy = 1; newFacing = 'down'; }
+        else if (code === 'A') { this.processPlayerTurn({ type: 'ATTACK' }); return; }
+        else if (code === 'B') { this.processPlayerTurn({ type: 'DASH' }); return; }
+
+        if (dx !== 0 || dy !== 0) {
+            if (newFacing !== this.player.facing) { 
+                this.player.facing = newFacing; 
+                this.updatePlayerRotation(); 
+                return; 
+            }
+            this.processPlayerTurn({ type: 'MOVE', dx: dx, dy: dy });
+        }
+    }
+
+    // --- 選單邏輯 ---
+    toggleInventory() {
+        if (this.currentState === STATE.PLAYING) {
+            this.currentState = STATE.INVENTORY;
+            this.menuContainer.setVisible(true);
+            this.updateMenuDisplay();
+        } else {
+            this.currentState = STATE.PLAYING;
+            this.menuContainer.setVisible(false);
+        }
+    }
+
+    handleMenuInput(code) {
+        if (code === 'up') {
+            this.menuIndex--;
+            if (this.menuIndex < 0) this.menuIndex = this.inventory.length - 1;
+            this.updateMenuDisplay();
+        } else if (code === 'down') {
+            this.menuIndex++;
+            if (this.menuIndex >= this.inventory.length) this.menuIndex = 0;
+            this.updateMenuDisplay();
+        } else if (code === 'A') {
+            // 裝備/卸下
+            const item = this.inventory[this.menuIndex];
+            item.equipped = !item.equipped;
+            this.updateStats(); // 重新計算數值
+            this.updateMenuDisplay();
+        } else if (code === 'B' || code === 'OPTION') {
+            this.toggleInventory(); // 關閉
+        }
+    }
+
+    updateMenuDisplay() {
+        // 清空顯示
+        this.menuItems.forEach(t => t.setText(""));
+        
+        this.inventory.forEach((item, index) => {
+            const cursor = (index === this.menuIndex) ? "> " : "  ";
+            const status = item.equipped ? "[E]" : "[ ]";
+            const color = item.equipped ? "#00ff00" : "#ffffff";
+            
+            if (this.menuItems[index]) {
+                this.menuItems[index].setText(`${cursor}${status} ${item.name}`);
+                this.menuItems[index].setColor(color);
+            }
+        });
+    }
+
+    // --- 數值計算 ---
+    updateStats() {
+        // 重置為基礎值
+        let totalHpBonus = 0;
+        let totalAtkBonus = 0;
+
+        this.inventory.forEach(item => {
+            if (item.equipped) {
+                if (item.type === 'weapon') totalAtkBonus += item.val;
+                if (item.type === 'armor') totalHpBonus += item.val;
+            }
+        });
+
+        // 攻擊力更新
+        this.player.atk = 1 + totalAtkBonus;
+
+        // 血量邏輯：如果裝備盔甲，MaxHP變大，補血
+        const oldMax = this.player.maxHp;
+        this.player.maxHp = this.player.baseHp + totalHpBonus;
+        
+        // 如果 MaxHP 增加了 (裝備盔甲)，把增加的量補到當前 HP
+        if (this.player.maxHp > oldMax) {
+            this.player.hp += (this.player.maxHp - oldMax);
+        }
+        // 如果 MaxHP 減少了 (卸下盔甲)，把當前 HP 砍到上限
+        if (this.player.hp > this.player.maxHp) {
+            this.player.hp = this.player.maxHp;
+        }
+
+        this.updateHPUI();
+    }
+
+    updateHPUI() {
+        this.hpText.setText(`HP: ${this.player.hp}/${this.player.maxHp}`);
+        if (this.player.hp <= 3) this.hpText.setColor('#ff0000');
+        else this.hpText.setColor('#00ff00');
+    }
+
+    // --- 遊戲邏輯 ---
+    processPlayerTurn(action) {
+        this.inputLocked = true;
+        let turnDuration = 0;
+
+        if (action.type === 'MOVE') {
+            const targetX = this.player.gridX + action.dx; const targetY = this.player.gridY + action.dy;
+            if (LEVEL_DATA[targetY][targetX] === 1 || this.getEnemyAt(targetX, targetY)) { 
+                this.shakePlayer(action.dx, action.dy); 
+                turnDuration = 80; 
+            } else {
+                this.player.gridX = targetX; this.player.gridY = targetY;
+                this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
+                turnDuration = MOVE_DURATION;
+            }
+        } else if (action.type === 'ATTACK') {
+            const { dx, dy } = this.getFacingVector(); const targetX = this.player.gridX + dx; const targetY = this.player.gridY + dy;
+            this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 10, y: this.player.sprite.y + dy * 10, duration: 80, yoyo: true });
+            const enemy = this.getEnemyAt(targetX, targetY);
+            if (enemy) { 
+                // 使用目前攻擊力
+                this.damageEnemy(enemy, this.player.atk); 
+                this.showEffect(targetX, targetY, 0xffffff); 
+            } 
+            else { this.showEffect(targetX, targetY, 0x555555); }
+            turnDuration = 160;
+        } else if (action.type === 'DASH') {
+            const { dx, dy } = this.getFacingVector(); let targetX = this.player.gridX; let targetY = this.player.gridY;
+            for (let i = 1; i <= 2; i++) { const tx = this.player.gridX + dx * i; const ty = this.player.gridY + dy * i; if (LEVEL_DATA[ty][tx] !== 1 && !this.getEnemyAt(tx, ty)) { targetX = tx; targetY = ty; } else { break; }}
+            if (targetX !== this.player.gridX || targetY !== this.player.gridY) {
+                this.player.gridX = targetX; this.player.gridY = targetY;
+                this.tweens.add({ targets: this.player.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: 100, ease: 'Power2' });
+                this.showEffect(this.player.gridX, this.player.gridY, 0x00ff00);
+            }
+            turnDuration = 100;
+        }
+
+        this.time.delayedCall(turnDuration + TURN_DELAY, () => this.processEnemiesTurn());
+    }
+
+    processEnemiesTurn() {
+        if (this.enemies.length === 0) {
+            // 檢查勝利
+            this.checkWinCondition();
+            this.unlockInput();
+            return;
+        }
+
+        this.enemies.forEach(enemy => {
+            const dx = this.player.gridX - enemy.gridX;
+            const dy = this.player.gridY - enemy.gridY;
+            const dist = Math.abs(dx) + Math.abs(dy); 
+
+            if (dist === 1) {
+                this.damagePlayer();
+                this.tweens.add({
+                    targets: enemy.sprite, x: enemy.sprite.x + dx * 10, y: enemy.sprite.y + dy * 10, duration: 50, yoyo: true
+                });
+            } else if (dist < 8) { 
+                let moveX = 0; let moveY = 0;
+                if (Math.abs(dx) > Math.abs(dy)) { moveX = dx > 0 ? 1 : -1; } else { moveY = dy > 0 ? 1 : -1; }
+
+                const targetX = enemy.gridX + moveX;
+                const targetY = enemy.gridY + moveY;
+                
+                if (LEVEL_DATA[targetY][targetX] !== 1 && 
+                    !(targetX === this.player.gridX && targetY === this.player.gridY) &&
+                    !this.getEnemyAt(targetX, targetY)) {
+                    
+                    enemy.gridX = targetX; enemy.gridY = targetY;
+                    this.tweens.add({ targets: enemy.sprite, x: targetX * TILE_SIZE + TILE_SIZE/2, y: targetY * TILE_SIZE + TILE_SIZE/2, duration: MOVE_DURATION });
+                }
+            }
+        });
+
+        this.time.delayedCall(MOVE_DURATION + 50, () => this.unlockInput());
+    }
+
+    damagePlayer() {
+        this.player.hp--;
+        this.updateHPUI();
+        this.cameras.main.flash(100, 255, 0, 0);
+        if (this.player.hp <= 0) { this.handleEndGame(false); }
+    }
+
+    damageEnemy(enemy, dmg) {
+        enemy.hp -= dmg;
+        this.tweens.add({ targets: enemy.sprite, alpha: 0.2, duration: 50, yoyo: true, repeat: 3 });
+        
+        // 更新敵人血條
+        const hpBar = enemy.sprite.list[1]; 
+        if(hpBar) {
+            // 假設敵人最大血量是 3
+            let width = (enemy.hp / 3) * 20;
+            if (width < 0) width = 0;
+            hpBar.width = width;
+        }
+
+        if (enemy.hp <= 0) { 
+            this.enemies = this.enemies.filter(e => e !== enemy); 
+            enemy.sprite.destroy(); 
+            this.checkWinCondition();
+        }
+    }
+
+    checkWinCondition() {
+        if (this.enemies.length === 0) {
+            this.handleEndGame(true);
+        }
+    }
+
+    handleEndGame(win) {
+        this.currentState = STATE.GAMEOVER;
+        this.inputLocked = true; // 鎖定操作，等待按鈕
+        
+        const txt = win ? "VICTORY!" : "GAME OVER";
+        const color = win ? "#00ff00" : "#ff0000";
+
+        // 更新並顯示結束文字
+        this.gameOverText.setText(txt);
+        this.gameOverText.setColor(color);
+        this.gameOverText.setPosition(this.cameras.main.width/2, this.cameras.main.height/2);
+        this.gameOverText.setVisible(true);
+
+        // 稍微延遲一下，避免玩家在連打時意外跳過畫面
+        this.time.delayedCall(500, () => {
+            // 解鎖輸入，但因為 state 是 GAMEOVER，handleExternalInput 會處理重啟
+            this.inputLocked = false; 
+        });
+    }
+
+    showEffect(gx, gy, color) {
+        const effect = this.add.rectangle(gx * TILE_SIZE + TILE_SIZE/2, gy * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, color, 0.7);
+        this.tweens.add({ targets: effect, scale: 1.5, alpha: 0, duration: 200, onComplete: () => effect.destroy() });
+    }
+    shakePlayer(dx, dy) { this.tweens.add({ targets: this.player.sprite, x: this.player.sprite.x + dx * 5, y: this.player.sprite.y + dy * 5, duration: 50, yoyo: true }); }
+    unlockInput() { if(this.currentState === STATE.PLAYING) this.inputLocked = false; }
+    getEnemyAt(x, y) { return this.enemies.find(e => e.gridX === x && e.gridY === y); }
+    getFacingVector() { switch(this.player.facing) { case 'up': return { dx: 0, dy: -1 }; case 'down': return { dx: 0, dy: 1 }; case 'left': return { dx: -1, dy: 0 }; case 'right': return { dx: 1, dy: 0 }; } return { dx: 0, dy: 0 }; }
+    updatePlayerRotation() { let angle = 0; switch(this.player.facing) { case 'up': angle = 0; break; case 'right': angle = 90; break; case 'down': angle = 180; break; case 'left': angle = -90; break; } this.player.sprite.angle = angle; }
+}
+
+function bindControls() {
+    const btns = document.querySelectorAll('.d-btn, .btn, .btn-opt');
+    btns.forEach(btn => {
+        btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); 
+            const scene = game.scene.getScene('MainScene');
+            if (!scene) return;
+            
+            // 特別處理 OPTION
+            if (btn.id === 'btn-opt') {
+                scene.handleExternalInput('OPTION');
+            } else {
+                const key = btn.getAttribute('data-key');
+                if (key) scene.handleExternalInput(key);
+            }
+        });
+    });
+}
+
+const config = {
+    type: Phaser.AUTO, parent: 'game-wrapper',
+    width: 640, height: 480, backgroundColor: '#000000',
+    scene: MainScene, scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
+};
+
+const game = new Phaser.Game(config);
+bindControls();
+</script>
+</body>
+</html>
