@@ -3,176 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Rogue V11 - Responsive UI & HUD</title>
+    <title>Pixel Rogue V12 - Bug Fixes</title>
     <style>
-        /* --- 1. 全局設定 --- */
-        body { 
-            margin: 0; padding: 0; 
-            background-color: #111; 
-            overflow: hidden; 
-            touch-action: none;
-            height: 100vh; width: 100vw;
-            font-family: monospace;
-            user-select: none;
-            /* 避免 iOS 點擊高亮 */
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #app-container {
-            width: 100%; height: 100%;
-            display: grid;
-            /* 橫向預設 */
-            grid-template-columns: 25% 1fr 25%;
-            grid-template-rows: 100%;
-            grid-template-areas: "left screen right";
-        }
-
-        /* --- 2. 手把容器 (Joycon Containers) --- */
-        .joycon-container {
-            background-color: #333;
-            position: relative;
-            display: flex;
-            z-index: 2;
-            box-shadow: inset 0 0 5vmin rgba(0,0,0,0.5);
-            /* 讓內容物居中 */
-            justify-content: center;
-            align-items: center;
-        }
-
-        #joycon-left { 
-            grid-area: left; 
-            border-right: 0.5vmin solid #222; 
-            border-radius: 20px 0 0 20px;
-        }
-
-        #joycon-right { 
-            grid-area: right; 
-            border-left: 0.5vmin solid #222; 
-            border-radius: 0 20px 20px 0;
-        }
-
-        #game-wrapper {
-            grid-area: screen;
-            background: #000;
-            display: flex; justify-content: center; align-items: center;
-            z-index: 1;
-            box-shadow: 0 0 30px rgba(0,0,0,0.8);
-            position: relative; 
-        }
-
-        /* --- 3. 響應式按鈕佈局 (核心修改) --- */
-        
-        /* 使用 vmin 單位：
-           1vmin = 螢幕寬或高中較小那邊的 1%。
-           這保證了按鈕在直立或橫放時都不會超出邊界。
-        */
-
-        /* 十字鍵容器 */
-        .d-pad {
-            position: relative;
-            width: 35vmin;  /* 佔短邊的 35% */
-            height: 35vmin;
-            max-width: 250px; /* 電腦版上限限制 */
-            max-height: 250px;
-        }
-
-        /* 動作鍵容器 */
-        .action-pad {
-            position: relative;
-            width: 35vmin;
-            height: 35vmin;
-            max-width: 250px;
-            max-height: 250px;
-        }
-
-        /* 通用按鈕樣式 (使用 % 讓它隨容器縮放) */
-        .d-btn {
-            position: absolute;
-            background: #222;
-            border-radius: 15%; /* 稍微圓角 */
-            box-shadow: 0 0.8vmin 0 #111;
-            border: 0.3vmin solid #444;
-            width: 33%; height: 33%; /* 九宮格大小 */
-            cursor: pointer;
-        }
+        body { margin: 0; padding: 0; background-color: #111; overflow: hidden; touch-action: none; height: 100vh; width: 100vw; font-family: monospace; user-select: none; -webkit-tap-highlight-color: transparent; }
+        #app-container { width: 100%; height: 100%; display: grid; grid-template-columns: 25% 1fr 25%; grid-template-rows: 100%; grid-template-areas: "left screen right"; }
+        .joycon-container { background-color: #333; position: relative; display: flex; z-index: 2; box-shadow: inset 0 0 5vmin rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        #joycon-left { grid-area: left; border-right: 0.5vmin solid #222; border-radius: 20px 0 0 20px; }
+        #joycon-right { grid-area: right; border-left: 0.5vmin solid #222; border-radius: 0 20px 20px 0; }
+        #game-wrapper { grid-area: screen; background: #000; display: flex; justify-content: center; align-items: center; z-index: 1; box-shadow: 0 0 30px rgba(0,0,0,0.8); position: relative; }
+        .d-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
+        .action-pad { position: relative; width: 35vmin; height: 35vmin; max-width: 250px; max-height: 250px; }
+        .d-btn { position: absolute; background: #222; border-radius: 15%; box-shadow: 0 0.8vmin 0 #111; border: 0.3vmin solid #444; width: 33%; height: 33%; cursor: pointer; }
         .d-btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 #111; background: #1a1a1a; }
-
-        /* 十字鍵位置 (九宮格佈局) */
-        .up    { top: 0; left: 33.3%; }
-        .down  { bottom: 0; left: 33.3%; }
-        .left  { top: 33.3%; left: 0; }
-        .right { top: 33.3%; right: 0; }
-        .center-decor { 
-            position: absolute; width: 33%; height: 33%; 
-            top: 33.3%; left: 33.3%; 
-            background: #222; border-radius: 10%;
-        }
-
-        /* A/B 按鈕 (圓形) */
-        .btn {
-            position: absolute;
-            width: 40%; height: 40%; /* 佔容器的 40% */
-            border-radius: 50%;
-            color: rgba(255,255,255,0.9);
-            font-weight: bold;
-            /* 字體大小也隨螢幕縮放 */
-            font-size: 5vmin; 
-            display: flex; justify-content: center; align-items: center;
-            box-shadow: 0 0.8vmin 0 rgba(0,0,0,0.6);
-            border: 0.4vmin solid rgba(255,255,255,0.1);
-            cursor: pointer;
-        }
+        .up { top: 0; left: 33.3%; } .down { bottom: 0; left: 33.3%; } .left { top: 33.3%; left: 0; } .right { top: 33.3%; right: 0; }
+        .center-decor { position: absolute; width: 33%; height: 33%; top: 33.3%; left: 33.3%; background: #222; border-radius: 10%; }
+        .btn { position: absolute; width: 40%; height: 40%; border-radius: 50%; color: rgba(255,255,255,0.9); font-weight: bold; font-size: 5vmin; display: flex; justify-content: center; align-items: center; box-shadow: 0 0.8vmin 0 rgba(0,0,0,0.6); border: 0.4vmin solid rgba(255,255,255,0.1); cursor: pointer; }
         .btn:active { transform: translateY(0.5vmin); box-shadow: 0 0.2vmin 0 rgba(0,0,0,0.6); opacity: 0.9; }
-
-        .btn-a { background: #e74c3c; right: 0; top: 20%; } 
-        .btn-b { background: #3498db; right: 40%; bottom: 0; } 
-
-        /* Option 按鈕 */
-        .opt-container {
-            position: absolute; top: 5%; left: 10%;
-            display: flex; flex-direction: column; align-items: center;
-        }
-        .btn-opt {
-            width: 8vmin; height: 3vmin; 
-            background: #222; border-radius: 2vmin;
-            border: 0.3vmin solid #555; cursor: pointer;
-            display: flex; justify-content: center; align-items: center;
-        }
+        .btn-a { background: #e74c3c; right: 0; top: 20%; } .btn-b { background: #3498db; right: 40%; bottom: 0; }
+        .opt-container { position: absolute; top: 5%; left: 10%; display: flex; flex-direction: column; align-items: center; }
+        .btn-opt { width: 8vmin; height: 3vmin; background: #222; border-radius: 2vmin; border: 0.3vmin solid #555; cursor: pointer; display: flex; justify-content: center; align-items: center; }
         .btn-opt:active { background: #000; }
-        .opt-label { 
-            color: #888; font-size: 2vmin; margin-top: 0.5vmin; 
-            font-weight: bold; letter-spacing: 1px; 
-        }
-
-        /* --- 4. 直立模式適配 (Portrait) --- */
+        .opt-label { color: #888; font-size: 2vmin; margin-top: 0.5vmin; font-weight: bold; letter-spacing: 1px; }
         @media (orientation: portrait) {
-            #app-container {
-                grid-template-columns: 50% 50%;
-                grid-template-rows: 60% 40%; /* 螢幕佔 60%, 控制器佔 40% */
-                grid-template-areas: 
-                    "screen screen" 
-                    "left right";
-            }
-            .joycon-container {
-                border: none; border-radius: 0; background-color: #444; box-shadow: none;
-                border-top: 0.5vmin solid #222;
-            }
-            #joycon-left { justify-content: flex-end; padding-right: 5vw; }
-            #joycon-right { justify-content: flex-start; padding-left: 5vw; }
-            
-            /* 在直立模式下，按鈕稍微大一點點以方便單手操作 */
-            .d-pad, .action-pad {
-                width: 40vmin; height: 40vmin;
-            }
+            #app-container { grid-template-columns: 50% 50%; grid-template-rows: 60% 40%; grid-template-areas: "screen screen" "left right"; }
+            .joycon-container { border: none; border-radius: 0; background-color: #444; box-shadow: none; border-top: 0.5vmin solid #222; }
+            #joycon-left { justify-content: flex-end; padding-right: 5vw; } #joycon-right { justify-content: flex-start; padding-left: 5vw; }
+            .d-pad, .action-pad { width: 40vmin; height: 40vmin; }
         }
-        
-        /* --- 5. 橫向模式微調 (人體工學) --- */
         @media (orientation: landscape) {
-            /* 讓按鈕稍微靠上，符合大拇指位置 */
-            #joycon-left { align-items: flex-start; padding-top: 15vh; }
-            #joycon-right { align-items: flex-start; padding-top: 15vh; }
+            #joycon-left { align-items: flex-start; padding-top: 15vh; } #joycon-right { align-items: flex-start; padding-top: 15vh; }
         }
-
     </style>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 </head>
@@ -204,6 +64,7 @@
     </div>
 
 <script>
+// --- V12 參數 ---
 const TILE_SIZE = 32; 
 const GRID_W = 20;
 const GRID_H = 15;
@@ -248,11 +109,13 @@ class MainScene extends Phaser.Scene {
         this.createPlayer(2, 2);
         this.spawnEnemy(5); 
         
-        // --- 建立圖形化 HUD (血條) ---
+        // --- 修正點 1: 確保只呼叫一次 createHUD，並不被舊程式碼覆蓋 ---
         this.createHUD();
 
         this.updateStats(); 
         this.createInventoryUI();
+
+        // (已移除這裡導致衝突的舊 hpText 定義)
 
         this.gameOverText = this.add.text(0, 0, 'GAME OVER', {
             fontSize: '40px', color: '#ff0000', backgroundColor: '#000000dd', padding: {x:20, y:10}
@@ -281,11 +144,12 @@ class MainScene extends Phaser.Scene {
         const arrow = this.add.triangle(0, -10, 0, 0, -5, 8, 5, 8, 0xffff00).setOrigin(0.5);
         container.add([body, arrow]);
         
+        // --- 修正點 2: 基礎血量調降為 5，讓沒穿裝備時更容易死 ---
         this.player = { 
             gridX: gx, gridY: gy, 
             facing: 'down', 
             sprite: container,
-            baseHp: 10, hp: 10, maxHp: 10, atk: 1 
+            baseHp: 5, hp: 5, maxHp: 5, atk: 1 
         };
     }
 
@@ -312,17 +176,13 @@ class MainScene extends Phaser.Scene {
 
     // --- HUD 系統 ---
     createHUD() {
-        // 固定在左上角的 UI 容器
         this.hudContainer = this.add.container(10, 10).setScrollFactor(0).setDepth(100);
-
-        // 1. 血條背景 (深灰色)
+        // 血條背景
         this.hpBarBg = this.add.rectangle(0, 0, 200, 20, 0x330000).setOrigin(0, 0).setStrokeStyle(1, 0xffffff);
-        
-        // 2. 當前血條 (綠色)
+        // 血條前景 (綠色)
         this.hpBarFg = this.add.rectangle(0, 0, 200, 20, 0x00ff00).setOrigin(0, 0);
-
-        // 3. 文字數值
-        this.hpText = this.add.text(10, 2, 'HP 10/10', { 
+        // 文字
+        this.hpText = this.add.text(10, 2, '', { 
             fontSize: '14px', fill: '#ffffff', fontStyle: 'bold', fontFamily: 'monospace',
             stroke: '#000000', strokeThickness: 3
         }).setOrigin(0, 0);
@@ -330,18 +190,16 @@ class MainScene extends Phaser.Scene {
         this.hudContainer.add([this.hpBarBg, this.hpBarFg, this.hpText]);
     }
 
-    // 更新血條邏輯
     updateHPUI() {
+        // 確保 hpText 存在才更新 (避免初始化順序問題)
+        if (!this.hpText || !this.hpBarFg) return;
+
         const hpPercent = Phaser.Math.Clamp(this.player.hp / this.player.maxHp, 0, 1);
-        
-        // 1. 調整綠條寬度
         this.hpBarFg.width = 200 * hpPercent;
         
-        // 2. 顏色變化 (低血量變紅)
         if (hpPercent < 0.3) this.hpBarFg.fillColor = 0xff0000;
         else this.hpBarFg.fillColor = 0x00ff00;
 
-        // 3. 更新文字
         this.hpText.setText(`HP ${this.player.hp}/${this.player.maxHp}`);
     }
 
@@ -466,7 +324,6 @@ class MainScene extends Phaser.Scene {
         if (this.player.hp > this.player.maxHp) {
             this.player.hp = this.player.maxHp;
         }
-        // 更新血條 UI
         this.updateHPUI();
     }
 
